@@ -176,114 +176,73 @@ button.red{
 const calendar = document.getElementById('calendar')
 const month = document.getElementById('month')
 const year = document.getElementById('year')
-const selected = document.getElementById('selectedDate')
-const startTime = document.getElementById('startTime')
-const endTime = document.getElementById('endTime')
-const clientName = document.getElementById('clientName')
-const clientPhone = document.getElementById('clientPhone')
 const bookingList = document.getElementById('bookingList')
-const logPanel = document.getElementById('logPanel')
 
 const months = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 const days = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
 
 months.forEach((m,i)=>month.innerHTML+=`<option value="${i}">${m}</option>`)
 for(let y=2026;y<=2035;y++) year.innerHTML+=`<option>${y}</option>`
-month.value=0;year.value=2026
+month.value = 0
+year.value = 2026
 
-function getStorageKey(){return `bookings_${year.value}_${month.value}`}
+let bookings = []
 
-month.onchange=year.onchange=()=>{selected.value='';renderCalendar();renderBookings()}
-
-function ordenarPorData(bookings){
-  return bookings.sort((a,b)=>{
-    const [da,ma,ya]=a.date.split('/')
-    const [db,mb,yb]=b.date.split('/')
-    return new Date(ya,ma-1,da)-new Date(yb,mb-1,db)
+function ordenarPorData(lista){
+  return lista.sort((a,b)=>{
+    const [da,ma,ya] = a.date.split('/')
+    const [db,mb,yb] = b.date.split('/')
+    return new Date(ya,ma-1,da) - new Date(yb,mb-1,db)
   })
 }
 
-function renderCalendar(){
-  calendar.innerHTML=''
-  days.forEach(d=>calendar.innerHTML+=`<div class="day-name">${d}</div>`)
-  const first=new Date(year.value,month.value,1).getDay()
-  const total=new Date(year.value,Number(month.value)+1,0).getDate()
-  for(let i=0;i<first;i++) calendar.innerHTML+='<div></div>'
-  const bookings=JSON.parse(localStorage.getItem(getStorageKey())||'[]')
-  for(let d=1;d<=total;d++){
-    const date=`${d}/${Number(month.value)+1}/${year.value}`
-    const booked=bookings.some(b=>b.date===date)
-    calendar.innerHTML+=`<div class="day ${booked?'booked':''}" onclick="selectDay('${date}',this)">${d}</div>`
+async function carregarAgenda(){
+  try{
+    const res = await fetch('agenda.json')
+    bookings = await res.json()
+    bookings = ordenarPorData(bookings)
+    renderCalendar()
+    renderBookings()
+  }catch(e){
+    bookingList.innerHTML = '<li>Erro ao carregar agenda</li>'
   }
 }
 
-function selectDay(date,el){
-  if(el.classList.contains('booked'))return alert('Dia já alugado')
-  document.querySelectorAll('.day').forEach(d=>d.classList.remove('selected'))
-  el.classList.add('selected')
-  selected.value=date
-}
+month.onchange = year.onchange = () => renderCalendar()
 
-function saveBooking(){
-  if(!selected.value||!startTime.value||!endTime.value||!clientName.value||!clientPhone.value)
-    return alert('Preencha tudo')
-  const key=getStorageKey()
-  let bookings=JSON.parse(localStorage.getItem(key)||'[]')
-  bookings.push({
-    id:Date.now(),
-    date:selected.value,
-    start:startTime.value,
-    end:endTime.value,
-    name:clientName.value,
-    phone:clientPhone.value
-  })
-  localStorage.setItem(key,JSON.stringify(bookings))
-  addLog(`Reserva: ${selected.value} - ${clientName.value}`)
-  selected.value=startTime.value=endTime.value=clientName.value=clientPhone.value=''
-  renderCalendar();renderBookings()
+function renderCalendar(){
+  calendar.innerHTML = ''
+  days.forEach(d => calendar.innerHTML += `<div class="day-name">${d}</div>`)
+
+  const first = new Date(year.value, month.value, 1).getDay()
+  const total = new Date(year.value, Number(month.value)+1, 0).getDate()
+
+  for(let i=0;i<first;i++) calendar.innerHTML += '<div></div>'
+
+  for(let d=1; d<=total; d++){
+    const date = `${d}/${Number(month.value)+1}/${year.value}`
+    const booked = bookings.some(b => b.date === date)
+
+    calendar.innerHTML += `
+      <div class="day ${booked ? 'booked' : ''}">
+        ${d}
+      </div>`
+  }
 }
 
 function renderBookings(){
-  bookingList.innerHTML=''
-  let bookings=JSON.parse(localStorage.getItem(getStorageKey())||'[]')
-  bookings=ordenarPorData(bookings)
-  bookings.forEach(b=>{
-    bookingList.innerHTML+=`
-    <li class="booking-item">
-      <div class="booking-date">📅 ${b.date} — ⏰ ${b.start} às ${b.end}</div>
-      <div class="booking-name">👤 ${b.name}</div>
-      <div class="booking-phone">📞 ${b.phone}</div>
-      <button onclick="removeBooking(${b.id})">❌ Remover</button>
-    </li>`
+  bookingList.innerHTML = ''
+  bookings.forEach(b => {
+    bookingList.innerHTML += `
+      <li class="booking-item">
+        <div class="booking-date">📅 ${b.date} — ⏰ ${b.start} às ${b.end}</div>
+        <div class="booking-name">👤 ${b.name}</div>
+        <div class="booking-phone">📞 ${b.phone}</div>
+      </li>`
   })
 }
 
-function removeBooking(id){
-  const key=getStorageKey()
-  let bookings=JSON.parse(localStorage.getItem(key)||'[]')
-  const r=bookings.find(b=>b.id===id)
-  bookings=bookings.filter(b=>b.id!==id)
-  localStorage.setItem(key,JSON.stringify(bookings))
-  if(r)addLog(`Reserva removida: ${r.date} - ${r.name}`)
-  renderCalendar();renderBookings()
-}
-
-function addLog(text){
-  const logs=JSON.parse(localStorage.getItem('logs')||'[]')
-  logs.unshift(`${new Date().toLocaleString()} — ${text}`)
-  localStorage.setItem('logs',JSON.stringify(logs))
-  renderLogs()
-}
-
-function renderLogs(){
-  const logs=JSON.parse(localStorage.getItem('logs')||'[]')
-  logPanel.innerHTML=logs.length?logs.join('<br>'):'Nenhum log'
-}
-
-function clearLogs(){if(confirm('Apagar logs?')){localStorage.removeItem('logs');renderLogs()}}
-function clearAll(){if(confirm('Apagar tudo deste mês?')){localStorage.removeItem(getStorageKey());renderCalendar();renderBookings()}}
-
-renderCalendar();renderBookings();renderLogs()
+carregarAgenda()
 </script>
 </body>
 </html>
